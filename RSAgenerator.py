@@ -2,7 +2,8 @@ from Crypto.PublicKey import RSA
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import scrypt
-
+import tkinter as tk
+from tkinter import messagebox
 
 def generate_rsa_keys():
     key = RSA.generate(4096)
@@ -28,6 +29,31 @@ def encrypt_private_key(private_key, pin):
     
     return cipher.nonce, tag, ciphertext
 
+def on_submit(pin_entry, private_key):
+    pin = pin_entry.get()
+    if len(pin) < 4: 
+        messagebox.showerror("Error", "PIN must be at least 4 characters long")
+        return
+    
+    nonce, tag, ciphertext = encrypt_private_key(private_key, pin)
+
+    messagebox.showinfo("Success", "Private key encrypted successfully")
+
+def create_gui():
+    root = tk.Tk()
+    root.title("Siging PDF documents")
+    root.geometry("500x400")
+
+    tk.Label(root, text="Enter PIN:").pack()
+
+    pin_entry = tk.Entry(root, show="*") 
+    pin_entry.pack()
+
+    submit_button = tk.Button(root, text="Submit", command=lambda: on_submit(pin_entry, private_key))
+    submit_button.pack()
+
+    root.mainloop()
+
 if __name__ == "__main__":
     private_key, public_key = generate_rsa_keys() 
-    encrypt_private_key(private_key, "1234")  
+    create_gui() 
