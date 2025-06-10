@@ -15,9 +15,6 @@ key_file_path = None
 public_key = None
 signed_pdf_path = None
 
-PLACEHOLDER_SIGNATURE = b"0" * 512 
-
-
 def find_usb_key(label=None):
     global key_file_path
     for part in psutil.disk_partitions():
