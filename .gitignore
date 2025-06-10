@@ -1,5 +1,2 @@
-example_signed.pdf
-example.pdf
-private.pem
-public.pem
-temp_with_placeholder.pdf
+*.pdf
+*.pem

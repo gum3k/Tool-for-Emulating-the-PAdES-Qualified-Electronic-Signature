@@ -7,6 +7,7 @@ from Crypto.PublicKey import RSA
 from Crypto.Signature import pkcs1_15
 from Crypto.Protocol.KDF import scrypt
 from Crypto.Hash import SHA256
+from PyPDF2 import PdfReader, PdfWriter
 
 private_key = None
 pdf_path = None
@@ -17,7 +18,7 @@ signed_pdf_path = None
 PLACEHOLDER_SIGNATURE = b"0" * 512 
 
 
-def find_usb_key():
+def find_usb_key(label=None):
     global key_file_path
     for part in psutil.disk_partitions():
         if 'removable' in part.opts.lower():
@@ -25,9 +26,14 @@ def find_usb_key():
             possible = os.path.join(usb_path, "encrypted_private_key.bin")
             if os.path.exists(possible):
                 key_file_path = possible
+                if label:
+                    label.config(text=f"Znaleziono klucz: {key_file_path}")
                 messagebox.showinfo("Sukces", f"Znaleziono klucz na: {key_file_path}")
                 return
+    if label:
+        label.config(text="Nie znaleziono klucza na pendrive.")
     messagebox.showerror("Błąd", "Nie znaleziono klucza na żadnym pendrive.")
+
 
 
 def decrypt_private_key(pin):
@@ -65,23 +71,24 @@ def sign_pdf_embed():
         messagebox.showerror("Błąd", "Brak klucza prywatnego lub pliku PDF.")
         return
     try:
-        with open(pdf_path, "rb") as f:
-            data = f.read()
+        reader = PdfReader(pdf_path)
+        writer = PdfWriter()
 
-        modified_data = data + b"\n%%SIG_START%%\n" + PLACEHOLDER_SIGNATURE + b"\n%%SIG_END%%\n"
+        for page in reader.pages:
+            writer.add_page(page)
 
-        with open("temp_with_placeholder.pdf", "wb") as f:
-            f.write(modified_data)
+        data = b"".join([page.extract_text().encode() for page in reader.pages])
 
-        h = SHA256.new(modified_data)
+        h = SHA256.new(data)
         signature = pkcs1_15.new(private_key).sign(h)
 
-        sig_start = modified_data.find(b"%%SIG_START%%") + len(b"%%SIG_START%%\n")
-        final_data = modified_data[:sig_start] + signature + modified_data[sig_start+len(signature):]
+        writer.add_metadata({
+            "/Signature": signature.hex(),
+        })
 
         signed_path = pdf_path.replace(".pdf", "_signed.pdf")
         with open(signed_path, "wb") as f:
-            f.write(final_data)
+            writer.write(f)
 
         messagebox.showinfo("Sukces", f"PDF podpisany jako: {signed_path}")
     except Exception as e:
@@ -104,6 +111,7 @@ def select_public_key():
             with open(path, "rb") as f:
                 public_key = RSA.import_key(f.read())
             messagebox.showinfo("Klucz", "Załadowano klucz publiczny.")
+            return
         except Exception as e:
             messagebox.showerror("Błąd", f"Nie udało się wczytać klucza:\n{e}")
 
@@ -114,22 +122,17 @@ def verify_pdf_signature():
         messagebox.showerror("Błąd", "Brak pliku PDF lub klucza publicznego.")
         return
     try:
-        with open(signed_pdf_path, "rb") as f:
-            full_data = f.read()
+        reader = PdfReader(signed_pdf_path)
+        signature_hex = reader.metadata.get("/Signature", "")
 
-        sig_start_marker = b"%%SIG_START%%\n"
-        sig_end_marker = b"\n%%SIG_END%%\n"
-        sig_start = full_data.find(sig_start_marker)
-        sig_end = full_data.find(sig_end_marker, sig_start)
-
-        if sig_start == -1 or sig_end == -1:
-            raise ValueError("Nie znaleziono podpisu.")
-
-        sig_start += len(sig_start_marker)
-        signature = full_data[sig_start:sig_end]
-
-        neutralized_data = full_data[:sig_start] + PLACEHOLDER_SIGNATURE + full_data[sig_end:]
-
+        if not signature_hex:
+            messagebox.showerror("Błąd", "Brak podpisu w pliku PDF.")
+            return
+        signature = bytes.fromhex(signature_hex)
+        neutralized_data = b"".join([page.extract_text().encode() for page in reader.pages])
+        if len(signature) != 512:
+            messagebox.showerror("Błąd", "Nieprawidłowy podpis. Oczekiwano 512 bajtów.")
+            return
         h = SHA256.new(neutralized_data)
         pkcs1_15.new(public_key).verify(h, signature)
         messagebox.showinfo("Weryfikacja", "Podpis poprawny.")
@@ -140,7 +143,7 @@ def verify_pdf_signature():
 def create_gui():
     root = Tk()
     root.title("PAdES Podpis i Weryfikacja")
-    root.geometry("500x420")
+    root.geometry("500x460")
 
     notebook = ttk.Notebook(root)
     notebook.pack(fill=BOTH, expand=True)
@@ -148,7 +151,10 @@ def create_gui():
     sign_tab = Frame(notebook)
     notebook.add(sign_tab, text="Podpisz dokument")
 
-    Button(sign_tab, text="Wykryj klucz prywatny na USB", command=find_usb_key).pack(pady=5)
+    usb_key_label = Label(sign_tab, text="", wraplength=480, fg="gray")
+    usb_key_label.pack()
+    Button(sign_tab, text="Wykryj klucz prywatny na USB", command=lambda: find_usb_key(usb_key_label)).pack(pady=5)
+
 
     Label(sign_tab, text="PIN do klucza prywatnego:").pack()
     pin_var = StringVar()
@@ -163,15 +169,50 @@ def create_gui():
             messagebox.showinfo("Sukces", "Klucz odszyfrowany.")
 
     Button(sign_tab, text="Załaduj klucz", command=load_key).pack(pady=5)
+
     Button(sign_tab, text="Wybierz PDF", command=select_pdf_to_sign).pack(pady=5)
+    pdf_label = Label(sign_tab, text="", wraplength=480, fg="gray")
+    pdf_label.pack()
+
     Button(sign_tab, text="Podpisz PDF", command=sign_pdf_embed).pack(pady=5)
 
     verify_tab = Frame(notebook)
     notebook.add(verify_tab, text="Zweryfikuj podpis")
 
     Button(verify_tab, text="Wybierz podpisany PDF", command=select_signed_pdf).pack(pady=5)
+    signed_pdf_label = Label(verify_tab, text="", wraplength=480, fg="gray")
+    signed_pdf_label.pack()
+
     Button(verify_tab, text="Wybierz klucz publiczny", command=select_public_key).pack(pady=5)
+    pubkey_label = Label(verify_tab, text="", wraplength=480, fg="gray")
+    pubkey_label.pack()
+
     Button(verify_tab, text="Zweryfikuj podpis", command=verify_pdf_signature).pack(pady=5)
+
+    def select_pdf_to_sign_local():
+        select_pdf_to_sign()
+        if pdf_path:
+            pdf_label.config(text=f"Wybrany PDF: {pdf_path}")
+
+    def select_signed_pdf_local():
+        select_signed_pdf()
+        if signed_pdf_path:
+            signed_pdf_label.config(text=f"Podpisany PDF: {signed_pdf_path}")
+
+    def select_public_key_local():
+        select_public_key()
+        if public_key:
+            pubkey_label.config(text="Klucz publiczny załadowany")
+
+    for widget in sign_tab.winfo_children():
+        if isinstance(widget, Button) and widget["text"] == "Wybierz PDF":
+            widget.config(command=select_pdf_to_sign_local)
+    for widget in verify_tab.winfo_children():
+        if isinstance(widget, Button):
+            if widget["text"] == "Wybierz podpisany PDF":
+                widget.config(command=select_signed_pdf_local)
+            elif widget["text"] == "Wybierz klucz publiczny":
+                widget.config(command=select_public_key_local)
 
     root.mainloop()
 
