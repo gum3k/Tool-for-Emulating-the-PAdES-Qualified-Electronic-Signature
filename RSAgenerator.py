@@ -1,3 +1,12 @@
+## @file
+#  @brief RSA key generator with encryption and USB storage support.
+#
+#  This module allows the user to generate a 4096-bit RSA key pair,
+#  encrypt the private key using a user-defined PIN,
+#  and store the encrypted private key on a removable USB drive.
+#
+#  It also provides a simple GUI using Tkinter for interactive use.
+
 import os
 import psutil
 from Crypto.PublicKey import RSA
@@ -10,6 +19,11 @@ from tkinter import messagebox, ttk
 private_key = None
 public_key = None
 
+##
+# @brief Generates an RSA key pair and saves it to PEM files.
+#
+# This function creates a 4096-bit RSA key pair and saves the public and private keys 
+# to 'public.pem' and 'private.pem'. It also updates global variables.
 def generate_rsa_keys():
     global private_key, public_key
     key = RSA.generate(4096)
@@ -23,6 +37,10 @@ def generate_rsa_keys():
 
     messagebox.showinfo("Sukces", "Wygenerowano parę kluczy RSA (4096 bitów).")
 
+##
+# @brief Detects removable USB drives.
+#
+# @return A list of drive letters representing removable USB drives.
 def get_usb_drives():
     drives = []
     for part in psutil.disk_partitions():
@@ -30,6 +48,12 @@ def get_usb_drives():
             drives.append(part.device)
     return drives
 
+##
+# @brief Encrypts the private RSA key with a password and stores it on a USB drive.
+#
+# @param pin A string PIN used to derive the encryption key.
+# @param usb_path The path to the USB drive where the encrypted key will be stored.
+# @return True if the encryption and saving was successful, False otherwise.
 def encrypt_private_key(pin, usb_path):
     global private_key
     salt = get_random_bytes(16)
@@ -44,9 +68,14 @@ def encrypt_private_key(pin, usb_path):
                 f.write(x)
         return True
     except Exception as e:
-        print(f"Błąd zapisu na pendrive: {e}")
+        print(f"Błąd zapisu na dysku: {e}")
         return False
 
+##
+# @brief Validates inputs and initiates the encryption process.
+#
+# @param pin_entry Tkinter Entry widget where the user enters the PIN.
+# @param usb_combo Tkinter Combobox widget for selecting the USB drive.
 def on_submit(pin_entry, usb_combo):
     global private_key
     pin = pin_entry.get()
@@ -58,14 +87,18 @@ def on_submit(pin_entry, usb_combo):
         return
     usb_path = usb_combo.get()
     if not usb_path:
-        messagebox.showerror("Błąd", "Wybierz pendrive.")
+        messagebox.showerror("Błąd", "Wybierz dysk.")
         return
     success = encrypt_private_key(pin, usb_path)
     if success:
-        messagebox.showinfo("Sukces", "Klucz zaszyfrowany i zapisany na pendrive.")
+        messagebox.showinfo("Sukces", "Klucz zaszyfrowany i zapisany na dysk.")
     else:
-        messagebox.showerror("Błąd", "Nie udało się zapisać klucza na pendrive.")
+        messagebox.showerror("Błąd", "Nie udało się zapisać klucza na dysk.")
 
+##
+# @brief Creates and runs the graphical user interface for the application.
+#
+# This GUI allows users to generate RSA keys and store the encrypted private key on a USB drive.
 def create_gui():
     root = tk.Tk()
     root.title("RSA Key Generator")
@@ -78,7 +111,7 @@ def create_gui():
     pin_entry = tk.Entry(root, show="*")
     pin_entry.pack()
 
-    tk.Label(root, text="Wybierz pendrive:").pack()
+    tk.Label(root, text="Wybierz dysk:").pack()
     usb_drives = get_usb_drives()
     if not usb_drives:
         usb_drives = [""]
@@ -87,10 +120,12 @@ def create_gui():
     if usb_drives:
         usb_combo.current(0)
 
-    submit_button = tk.Button(root, text="Zapisz klucz na pendrive", command=lambda: on_submit(pin_entry, usb_combo))
+    submit_button = tk.Button(root, text="Zapisz klucz na dysku", command=lambda: on_submit(pin_entry, usb_combo))
     submit_button.pack(pady=10)
 
     root.mainloop()
 
+##
+# @brief Entry point of the application.
 if __name__ == "__main__":
     create_gui()

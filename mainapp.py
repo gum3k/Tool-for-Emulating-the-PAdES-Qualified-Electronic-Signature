@@ -1,3 +1,12 @@
+## @file
+#  @brief Tool for signing and verifying PDF files using PAdES-like RSA signatures.
+#
+#  This module enables the detection and decryption of private keys stored on USB devices,
+#  signing of PDF files by embedding a digital signature in metadata,
+#  and verification of these signatures using a public RSA key.
+#
+#  It includes a GUI built with Tkinter for signing and verifying in separate tabs.
+
 import os
 import psutil
 from tkinter import *
@@ -15,6 +24,13 @@ key_file_path = None
 public_key = None
 signed_pdf_path = None
 
+##
+# @brief Searches for an encrypted private key file on a USB drive.
+# 
+# If found, updates the global `key_file_path` variable and optionally displays
+# the path in the provided label widget.
+#
+# @param label Optional Tkinter Label to display the key path.
 def find_usb_key(label=None):
     global key_file_path
     for part in psutil.disk_partitions():
@@ -32,7 +48,14 @@ def find_usb_key(label=None):
     messagebox.showerror("Błąd", "Nie znaleziono klucza na żadnym pendrive.")
 
 
-
+##
+# @brief Decrypts the private RSA key using the provided PIN.
+#
+# Reads the encrypted private key file from the USB drive and decrypts it
+# using AES-GCM with a key derived from the given PIN using scrypt.
+#
+# @param pin The PIN used for key derivation.
+# @return True if decryption succeeded, False otherwise.
 def decrypt_private_key(pin):
     global private_key
     if not key_file_path:
@@ -53,7 +76,10 @@ def decrypt_private_key(pin):
         messagebox.showerror("Błąd", f"Nie udało się odszyfrować klucza:\n{e}")
         return False
 
-
+##
+# @brief Opens a file dialog for selecting a PDF file to sign.
+#
+# Updates the global `pdf_path` variable if a file is selected.
 def select_pdf_to_sign():
     global pdf_path
     path = filedialog.askopenfilename(filetypes=[("PDF", "*.pdf")])
@@ -61,7 +87,11 @@ def select_pdf_to_sign():
         pdf_path = path
         messagebox.showinfo("PDF", f"Wybrano: {path}")
 
-
+##
+# @brief Digitally signs a PDF using the loaded private RSA key.
+#
+# The text content of all pages is hashed with SHA-256 and signed with the private key.
+# The hexadecimal representation of the signature is embedded as PDF metadata.
 def sign_pdf_embed():
     global pdf_path, private_key
     if not private_key or not pdf_path:
@@ -91,7 +121,10 @@ def sign_pdf_embed():
     except Exception as e:
         messagebox.showerror("Błąd", f"Podpisanie nie powiodło się:\n{e}")
 
-
+##
+# @brief Opens a file dialog to select a previously signed PDF file.
+#
+# Updates the global `signed_pdf_path` variable if a file is selected.
 def select_signed_pdf():
     global signed_pdf_path
     path = filedialog.askopenfilename(filetypes=[("PDF", "*.pdf"), ("Podpisane PDF", "*.pdf"), ("Pliki", "*.pdf*"), ("Wszystkie", "*.*")])
@@ -99,7 +132,10 @@ def select_signed_pdf():
         signed_pdf_path = path
         messagebox.showinfo("PDF", f"Wybrano: {signed_pdf_path}")
 
-
+##
+# @brief Opens a file dialog to select a PEM public key file.
+#
+# Loads and stores the RSA public key in the global `public_key` variable.
 def select_public_key():
     global public_key
     path = filedialog.askopenfilename(filetypes=[("PEM", "*.pem")])
@@ -112,7 +148,11 @@ def select_public_key():
         except Exception as e:
             messagebox.showerror("Błąd", f"Nie udało się wczytać klucza:\n{e}")
 
-
+##
+# @brief Verifies the digital signature embedded in a PDF file.
+#
+# Uses the SHA-256 hash of the document's text and verifies it against
+# the signature using the public RSA key.
 def verify_pdf_signature():
     global signed_pdf_path, public_key
     if not signed_pdf_path or not public_key:
@@ -136,7 +176,11 @@ def verify_pdf_signature():
     except Exception as e:
         messagebox.showerror("Weryfikacja", f"Podpis nieprawidłowy lub błąd:\n{e}")
 
-
+##
+# @brief Creates and starts the graphical user interface (GUI).
+#
+# The GUI includes tabs for signing and verifying PDF documents
+# using PAdES-style RSA signatures.
 def create_gui():
     root = Tk()
     root.title("PAdES Podpis i Weryfikacja")
